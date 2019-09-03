@@ -39,6 +39,13 @@ typedef struct ScaleVAAPIContext {
     char *h_expr;      // height expression string
 
     int keep_ar;
+
+    int64_t num_boxes;
+    int *xs, *ys, *ws, *hs;
+    char *xs_str, *ys_str;
+    char *ws_str, *hs_str;
+    AVFrame *black_frame;
+
 } ScaleVAAPIContext;
 
 static int scale_vaapi_config_output(AVFilterLink *outlink)
@@ -67,6 +74,23 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     return 0;
 }
 
+static void biggest_box(int num_boxes, int* ws, int* hs, int* width, int* height)
+{
+    int largestWidth = 0;
+    int largestHeight = 0;
+
+    for(int i = 0; i < num_boxes; ++i)
+    {
+        if(ws[i] > largestWidth)
+            largestWidth = ws[i];
+        if(hs[i] > largestHeight)
+            largestHeight = hs[i];
+    }
+
+    *width = largestWidth;
+    *height = largestHeight;
+}
+
 static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx   = inlink->dst;
@@ -86,6 +110,54 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 
     if (vpp_ctx->va_context == VA_INVALID_ID)
         return AVERROR(EINVAL);
+
+    if(ctx->black_frame == NULL && (ctx->num_boxes > 0))
+    {
+        int width, height;
+        biggest_box(ctx->num_boxes, &ctx->ws[0], &ctx->hs[0], &width, &height);
+
+        ctx->black_frame = ff_get_video_buffer(outlink, width, height);
+        if (!ctx->black_frame) {
+            err = AVERROR(ENOMEM);
+            goto fail;
+        }
+    }
+
+    input_surface = (VASurfaceID)(uintptr_t)ctx->black_frame->data[3];
+
+    for(int i = 0; i < ctx->num_boxes; ++i)
+    {
+        memset(&params, 0, sizeof(params));
+
+        input_region = (VARectangle) {
+            .x      = 0,
+            .y      = 0,
+            .width  = ctx->ws[i],
+            .height = ctx->hs[i]
+        };
+
+        params.surface = input_surface;
+        params.surface_region = &input_region;
+        params.surface_color_standard = ff_vaapi_vpp_colour_standard(input_frame->colorspace);
+
+        output_region = (VARectangle) {
+            .x = ctx->xs[i],
+            .y = ctx->ys[i],
+            .width = ctx->ws[i],
+            .height = ctx->hs[i]
+        };
+
+        params.output_region = &output_region;
+
+        params.output_background_color = 0xff00ff00;
+        params.output_color_standard = params.surface_color_standard;
+        params.pipeline_flags = 0;
+        params.filter_flags = VA_FILTER_SCALING_HQ;
+
+        err = ff_vaapi_vpp_render_picture(avctx, &params, (VASurfaceID)(uintptr_t)input_frame->data[3]);
+        if (err < 0)
+            goto fail;
+    }
 
     input_surface = (VASurfaceID)(uintptr_t)input_frame->data[3];
     av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for scale input.\n",
@@ -118,8 +190,11 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     params.surface_color_standard =
         ff_vaapi_vpp_colour_standard(input_frame->colorspace);
 
+    // if the aspect ratios of the input region and the output region differ significantly...
     if (ctx->keep_ar && fabsf((float)input_region.width / input_region.height -
                               (float)vpp_ctx->output_width / vpp_ctx->output_height) > 0.01) {
+
+        
         int orx = 0, ory = 0, orw = vpp_ctx->output_width, orh = vpp_ctx->output_height;
         if (input_region.width * vpp_ctx->output_height > vpp_ctx->output_width * input_region.height) {
             // Add vertical margins.
@@ -130,11 +205,13 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
             orw = vpp_ctx->output_height * input_region.width / input_region.height;
             orx = (vpp_ctx->output_width - orw) / 2;
         }
+
         output_region.x = orx;
         output_region.y = ory;
         output_region.width = orw;
         output_region.height = orh;
         params.output_region = &output_region;
+
     } else {
         params.output_region = NULL;
     }
@@ -170,6 +247,19 @@ fail:
     return err;
 }
 
+static void parse_numbers(char* s, int* i)
+{
+    char* rd = s;
+    char* token = NULL;
+    int index = 0;
+
+    while ((token = strtok_r(rd, "|", &rd)))
+    {
+        i[index] = atoi(token);
+        ++index;
+    }
+}
+
 static av_cold int scale_vaapi_init(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
@@ -189,7 +279,35 @@ static av_cold int scale_vaapi_init(AVFilterContext *avctx)
         vpp_ctx->output_format = AV_PIX_FMT_NONE;
     }
 
+    ctx->xs = (int*)av_malloc_array(ctx->num_boxes, sizeof(int));
+    parse_numbers(ctx->xs_str, ctx->xs);
+
+    ctx->ys = (int*)av_malloc_array(ctx->num_boxes, sizeof(int));
+    parse_numbers(ctx->ys_str, ctx->ys);
+
+    ctx->ws = (int*)av_malloc_array(ctx->num_boxes, sizeof(int));
+    parse_numbers(ctx->ws_str, ctx->ws);
+
+    ctx->hs = (int*)av_malloc_array(ctx->num_boxes, sizeof(int));
+    parse_numbers(ctx->hs_str, ctx->hs);
+
+    ctx->black_frame = NULL;
+
     return 0;
+}
+
+static av_cold void scale_vaapi_uninit(AVFilterContext *avctx)
+{
+    ScaleVAAPIContext *ctx = avctx->priv;
+
+    av_free(ctx->xs);
+    av_free(ctx->ys);
+    av_free(ctx->ws);
+    av_free(ctx->hs);
+
+    av_frame_free(&ctx->black_frame);
+
+    ff_vaapi_vpp_ctx_uninit(avctx);
 }
 
 #define OFFSET(x) offsetof(ScaleVAAPIContext, x)
@@ -203,6 +321,17 @@ static const AVOption scale_vaapi_options[] = {
       OFFSET(keep_ar), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
     { "format", "Output video format (software format of hardware frames)",
       OFFSET(output_format_string), AV_OPT_TYPE_STRING, .flags = FLAGS },
+    { "num_boxes", "The number of boxes to draw.",
+      OFFSET(num_boxes), AV_OPT_TYPE_INT64, {.i64=0}, CHAR_MIN, 1024, .flags = FLAGS },
+    { "xs", "array of xs",
+      OFFSET(xs_str), AV_OPT_TYPE_STRING, { .str="0" }, CHAR_MIN, CHAR_MAX, .flags = FLAGS },
+    { "ys", "array of ys",
+      OFFSET(ys_str), AV_OPT_TYPE_STRING, { .str="0" }, CHAR_MIN, CHAR_MAX, .flags = FLAGS },
+    { "ws", "array of widths",
+      OFFSET(ws_str), AV_OPT_TYPE_STRING, { .str="0" }, CHAR_MIN, CHAR_MAX, .flags = FLAGS },
+    { "hs", "array of heigts",
+      OFFSET(hs_str), AV_OPT_TYPE_STRING, { .str="0" }, CHAR_MIN, CHAR_MAX, .flags = FLAGS },
+
     { NULL },
 };
 
@@ -232,7 +361,7 @@ AVFilter ff_vf_scale_vaapi = {
     .description   = NULL_IF_CONFIG_SMALL("Scale to/from VAAPI surfaces."),
     .priv_size     = sizeof(ScaleVAAPIContext),
     .init          = &scale_vaapi_init,
-    .uninit        = &ff_vaapi_vpp_ctx_uninit,
+    .uninit        = &scale_vaapi_uninit,
     .query_formats = &ff_vaapi_vpp_query_formats,
     .inputs        = scale_vaapi_inputs,
     .outputs       = scale_vaapi_outputs,
