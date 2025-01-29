@@ -295,7 +295,7 @@ static int extradata2psets_hevc(const AVCodecParameters *par, char **out)
             pos += len;
         }
     }
-    if (!ps_pos[0] || !ps_pos[1] || !ps_pos[2])
+    if (!ps_pos[1] || !ps_pos[2])
         goto err;
 
     psets = av_mallocz(MAX_PSET_SIZE);
@@ -306,11 +306,16 @@ static int extradata2psets_hevc(const AVCodecParameters *par, char **out)
 
     psets[0] = '\0';
 
+    int first = 1;
     for (i = 0; i < 3; i++) {
         pos = ps_pos[i];
+        if (!pos) continue;
 
-        if (i > 0)
+        if (first) {
+            first = 0;
+        } else {
             av_strlcat(psets, "; ", MAX_PSET_SIZE);
+        }
         av_strlcatf(psets, MAX_PSET_SIZE, "sprop-%s=", ps_names[i]);
 
         // Skipping boundary checks in the input here; we've already traversed
