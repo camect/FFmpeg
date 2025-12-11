@@ -318,7 +318,7 @@ static void export_stream_params(HEVCContext *s, const HEVCSPS *sps)
 {
     AVCodecContext *avctx = s->avctx;
     const HEVCParamSets *ps = &s->ps;
-    const HEVCVPS *vps = (const HEVCVPS*)ps->vps_list[sps->vps_id]->data;
+    HEVCVPS *vps = NULL;
     const HEVCWindow *ow = &sps->output_window;
     unsigned int num = 0, den = 0;
 
@@ -358,7 +358,10 @@ static void export_stream_params(HEVCContext *s, const HEVCSPS *sps)
             avctx->chroma_sample_location = AVCHROMA_LOC_LEFT;
     }
 
-    if (vps->vps_timing_info_present_flag) {
+    if (ps->vps_list && ps->vps_list[sps->vps_id]) {
+        vps = (const HEVCVPS*)ps->vps_list[sps->vps_id]->data;
+    }
+    if (vps && vps->vps_timing_info_present_flag) {
         num = vps->vps_num_units_in_tick;
         den = vps->vps_time_scale;
     } else if (sps->vui.vui_timing_info_present_flag) {
@@ -522,7 +525,9 @@ static int set_sps(HEVCContext *s, const HEVCSPS *sps,
     }
 
     s->ps.sps = sps;
-    s->ps.vps = (HEVCVPS*) s->ps.vps_list[s->ps.sps->vps_id]->data;
+    if (s->ps.vps_list && s->ps.vps_list[s->ps.sps->vps_id]) {
+        s->ps.vps = (HEVCVPS*) s->ps.vps_list[s->ps.sps->vps_id]->data;
+    }
 
     return 0;
 

@@ -255,7 +255,7 @@ static int get_video_buffer(AVFrame *frame, int align)
         total_size += sizes[i];
     }
 
-    frame->buf[0] = av_buffer_alloc(total_size);
+    frame->buf[0] = av_buffer_allocz(total_size);
     if (!frame->buf[0]) {
         ret = AVERROR(ENOMEM);
         goto fail;
@@ -315,7 +315,7 @@ static int get_audio_buffer(AVFrame *frame, int align)
         frame->extended_data = frame->data;
 
     for (i = 0; i < FFMIN(planes, AV_NUM_DATA_POINTERS); i++) {
-        frame->buf[i] = av_buffer_alloc(frame->linesize[0]);
+        frame->buf[i] = av_buffer_allocz(frame->linesize[0]);
         if (!frame->buf[i]) {
             av_frame_unref(frame);
             return AVERROR(ENOMEM);
@@ -323,7 +323,7 @@ static int get_audio_buffer(AVFrame *frame, int align)
         frame->extended_data[i] = frame->data[i] = frame->buf[i]->data;
     }
     for (i = 0; i < planes - AV_NUM_DATA_POINTERS; i++) {
-        frame->extended_buf[i] = av_buffer_alloc(frame->linesize[0]);
+        frame->extended_buf[i] = av_buffer_allocz(frame->linesize[0]);
         if (!frame->extended_buf[i]) {
             av_frame_unref(frame);
             return AVERROR(ENOMEM);
@@ -728,7 +728,7 @@ AVFrameSideData *av_frame_new_side_data(AVFrame *frame,
                                         buffer_size_t size)
 {
     AVFrameSideData *ret;
-    AVBufferRef *buf = av_buffer_alloc(size);
+    AVBufferRef *buf = av_buffer_allocz(size);
     ret = av_frame_new_side_data_from_buf(frame, type, buf);
     if (!ret)
         av_buffer_unref(&buf);

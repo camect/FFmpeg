@@ -620,11 +620,7 @@ static int hls_delete_old_segments(AVFormatContext *s, HLSContext *hls,
         previous_segment = segment;
         segment = previous_segment->next;
         segment_cnt++;
-        if (playlist_duration <= -previous_segment->duration) {
-            previous_segment->next = NULL;
-            break;
-        }
-        if (segment_cnt >= hls->hls_delete_threshold) {
+        if (playlist_duration <= -previous_segment->duration && segment_cnt >= hls->hls_delete_threshold) {
             previous_segment->next = NULL;
             break;
         }
@@ -2102,6 +2098,12 @@ static int parse_variant_stream_mapstring(AVFormatContext *s)
                 continue;
             } else if (av_strstart(keyval, "ccgroup:", &val)) {
                 vs->ccgroup  = val;
+                continue;
+            } else if (av_strstart(keyval, "sgroup:", &val)) {
+                av_free(vs->sgroup);
+                vs->sgroup = av_strdup(val);
+                if (!vs->sgroup)
+                    return AVERROR(ENOMEM);
                 continue;
             } else if (av_strstart(keyval, "v:", &val)) {
                 codec_type = AVMEDIA_TYPE_VIDEO;

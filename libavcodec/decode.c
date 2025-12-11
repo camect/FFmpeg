@@ -467,11 +467,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (ret >= 0 && avctx->codec->type == AVMEDIA_TYPE_VIDEO && !(avctx->flags & AV_CODEC_FLAG_TRUNCATED))
         ret = pkt->size;
 
-#if FF_API_AVCTX_TIMEBASE
-    if (avctx->framerate.num > 0 && avctx->framerate.den > 0)
-        avctx->time_base = av_inv_q(av_mul_q(avctx->framerate, (AVRational){avctx->ticks_per_frame, 1}));
-#endif
-
     /* do not stop draining when actual_got_frame != 0 or ret < 0 */
     /* got_frame == 0 but actual_got_frame != 0 when frame is discarded */
     if (avci->draining && !actual_got_frame) {

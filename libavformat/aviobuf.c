@@ -33,7 +33,7 @@
 #include "url.h"
 #include <stdarg.h>
 
-#define IO_BUFFER_SIZE 32768
+#define IO_BUFFER_SIZE 65536
 
 /**
  * Do seeks within this distance ahead of the current buffer by skipping

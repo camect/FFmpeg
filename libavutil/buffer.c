@@ -255,6 +255,8 @@ AVBufferPool *av_buffer_pool_init2(buffer_size_t size, void *opaque,
         return NULL;
     }
 
+    pool->free_list_size = 3;
+    pool->num_entries = 0;
     pool->size      = size;
     pool->opaque    = opaque;
     pool->alloc2    = alloc;
@@ -277,6 +279,8 @@ AVBufferPool *av_buffer_pool_init(buffer_size_t size, AVBufferRef* (*alloc)(buff
         return NULL;
     }
 
+    pool->free_list_size = 3;
+    pool->num_entries = 0;
     pool->size     = size;
     pool->alloc    = alloc ? alloc : av_buffer_alloc;
 
@@ -336,10 +340,16 @@ static void pool_release_buffer(void *opaque, uint8_t *data)
     if(CONFIG_MEMORY_POISONING)
         memset(buf->data, FF_MEMORY_POISON, pool->size);
 
-    ff_mutex_lock(&pool->mutex);
-    buf->next = pool->pool;
-    pool->pool = buf;
-    ff_mutex_unlock(&pool->mutex);
+    if (pool->num_entries >= pool->free_list_size) {
+        buf->free(buf->opaque, buf->data);
+        av_freep(&buf);
+    } else {
+        ff_mutex_lock(&pool->mutex);
+        buf->next = pool->pool;
+        pool->pool = buf;
+        pool->num_entries++;
+        ff_mutex_unlock(&pool->mutex);
+    }
 
     if (atomic_fetch_sub_explicit(&pool->refcount, 1, memory_order_acq_rel) == 1)
         buffer_pool_free(pool);
@@ -387,6 +397,7 @@ AVBufferRef *av_buffer_pool_get(AVBufferPool *pool)
         ret = av_buffer_create(buf->data, pool->size, pool_release_buffer,
                                buf, 0);
         if (ret) {
+            pool->num_entries--;
             pool->pool = buf->next;
             buf->next = NULL;
         }
@@ -406,4 +417,8 @@ void *av_buffer_pool_buffer_get_opaque(AVBufferRef *ref)
     BufferPoolEntry *buf = ref->buffer->opaque;
     av_assert0(buf);
     return buf->opaque;
+}
+
+void av_buffer_pool_set_free_list_size(AVBufferPool *pool, int free_list_size) {
+    pool->free_list_size = free_list_size;
 }

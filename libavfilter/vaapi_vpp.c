@@ -99,9 +99,10 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
     AVVAAPIHWConfig *hwconfig = NULL;
     AVHWFramesConstraints *constraints = NULL;
     AVHWFramesContext *output_frames;
-    AVVAAPIFramesContext *va_frames;
     VAStatus vas;
     int err, i;
+    AVFrame* frame;
+    VASurfaceID surface_id;
 
     if (ctx->pipeline_uninit)
         ctx->pipeline_uninit(avctx);
@@ -187,7 +188,7 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
     output_frames->width     = ctx->output_width;
     output_frames->height    = ctx->output_height;
 
-    output_frames->initial_pool_size = 4;
+    output_frames->initial_pool_size = 0;
 
     err = ff_filter_init_hw_frames(avctx, outlink, 10);
     if (err < 0)
@@ -200,14 +201,20 @@ int ff_vaapi_vpp_config_output(AVFilterLink *outlink)
         goto fail;
     }
 
-    va_frames = output_frames->hwctx;
-
     av_assert0(ctx->va_context == VA_INVALID_ID);
+    frame = av_frame_alloc();
+    err = av_hwframe_get_buffer(outlink->hw_frames_ctx, frame, 0);
+    if (err < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to create frame: %d\n", err);
+        av_frame_free(&frame);
+        goto fail;
+    }
+    surface_id = (VASurfaceID)(uintptr_t)frame->data[3];
     vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
                           ctx->output_width, ctx->output_height,
-                          VA_PROGRESSIVE,
-                          va_frames->surface_ids, va_frames->nb_surfaces,
+                          VA_PROGRESSIVE, &surface_id, 1,
                           &ctx->va_context);
+    av_frame_free(&frame);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create processing pipeline "
                "context: %d (%s).\n", vas, vaErrorStr(vas));
@@ -539,7 +546,6 @@ int ff_vaapi_vpp_init_params(AVFilterContext *avctx,
     *params = (VAProcPipelineParameterBuffer) {
         .surface                 = input_surface,
         .surface_region          = &ctx->input_region,
-        .output_region           = NULL,
         .output_background_color = VAAPI_VPP_BACKGROUND_BLACK,
         .pipeline_flags          = 0,
         .filter_flags            = VA_FRAME_PICTURE,

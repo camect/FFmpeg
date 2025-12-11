@@ -403,7 +403,7 @@ static inline int retry_transfer_wrapper(URLContext *h, uint8_t *buf,
 
 int ffurl_read(URLContext *h, unsigned char *buf, int size)
 {
-    if (!(h->flags & AVIO_FLAG_READ))
+    if (!h || !(h->flags & AVIO_FLAG_READ))
         return AVERROR(EIO);
     return retry_transfer_wrapper(h, buf, size, 1, h->prot->url_read);
 }

@@ -1209,7 +1209,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     c->dstRange |= handle_jpeg(&c->dstFormat);
 
     if(srcFormat!=c->srcFormat || dstFormat!=c->dstFormat)
-        av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
+        av_log(c, AV_LOG_INFO, "deprecated pixel format used, make sure you did set range correctly\n");
 
     if (!c->contrast && !c->saturation && !c->dstFormatBpp)
         sws_setColorspaceDetails(c, ff_yuv2rgb_coeffs[SWS_CS_DEFAULT], c->srcRange,

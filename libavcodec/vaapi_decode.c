@@ -572,23 +572,7 @@ static int vaapi_decode_make_config(AVCodecContext *avctx,
         if (err < 0)
             goto fail;
 
-        frames->initial_pool_size = 1;
-        // Add per-codec number of surfaces used for storing reference frames.
-        switch (avctx->codec_id) {
-        case AV_CODEC_ID_H264:
-        case AV_CODEC_ID_HEVC:
-        case AV_CODEC_ID_AV1:
-            frames->initial_pool_size += 16;
-            break;
-        case AV_CODEC_ID_VP9:
-            frames->initial_pool_size += 8;
-            break;
-        case AV_CODEC_ID_VP8:
-            frames->initial_pool_size += 3;
-            break;
-        default:
-            frames->initial_pool_size += 2;
-        }
+        frames->initial_pool_size = 0;
     }
 
     av_hwframe_constraints_free(&constraints);
@@ -636,6 +620,8 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     VAAPIDecodeContext *ctx = avctx->internal->hwaccel_priv_data;
     VAStatus vas;
     int err;
+    AVFrame* frame;
+    VASurfaceID surface_id;
 
     ctx->va_config  = VA_INVALID_ID;
     ctx->va_context = VA_INVALID_ID;
@@ -694,12 +680,19 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     if (err)
         goto fail;
 
+    frame = av_frame_alloc();
+    err = av_hwframe_get_buffer(avctx->hw_frames_ctx, frame, 0);
+    if (err < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to create frame: %d\n", err);
+        av_frame_free(&frame);
+        goto fail;
+    }
+    surface_id = (VASurfaceID)(uintptr_t)frame->data[3];
     vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
                           avctx->coded_width, avctx->coded_height,
-                          VA_PROGRESSIVE,
-                          ctx->hwfc->surface_ids,
-                          ctx->hwfc->nb_surfaces,
+                          VA_PROGRESSIVE, &surface_id, 1,
                           &ctx->va_context);
+    av_frame_free(&frame);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create decode "
                "context: %d (%s).\n", vas, vaErrorStr(vas));

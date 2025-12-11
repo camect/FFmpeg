@@ -57,6 +57,7 @@ static int webvtt_write_header(AVFormatContext *ctx)
     avpriv_set_pts_info(s, 64, 1, 1000);
 
     avio_printf(pb, "WEBVTT\n");
+    avio_printf(pb, "X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000\n");
 
     return 0;
 }

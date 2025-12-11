@@ -41,6 +41,14 @@
 #include "log.h"
 #include "thread.h"
 
+#if CONFIG_LIBMFX
+#include <mfx/mfxdefs.h>
+#endif
+
+#if CONFIG_VAAPI
+#include <va/va.h>
+#endif
+
 static AVMutex mutex = AV_MUTEX_INITIALIZER;
 
 #define LINE_SZ 1024
@@ -440,6 +448,22 @@ int av_log_get_level(void)
 void av_log_set_level(int level)
 {
     av_log_level = level;
+#if CONFIG_LIBMFX
+    if (level >= AV_LOG_VERBOSE) {
+        g_libmfx_log_level = DL_LOADED_LIBRARY;
+    } else if (level >= AV_LOG_INFO) {
+        g_libmfx_log_level = DL_INFO;
+    } else if (level >= AV_LOG_WARNING) {
+        g_libmfx_log_level = DL_WRN;
+    } else if (level >= AV_LOG_ERROR) {
+        g_libmfx_log_level = DL_ERROR;
+    } else {
+        g_libmfx_log_level = DL_NONE;
+    }
+#endif
+#if CONFIG_VAAPI
+    g_va_log_level = level;
+#endif
 }
 
 void av_log_set_flags(int arg)

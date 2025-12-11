@@ -100,7 +100,10 @@ void ff_http_auth_handle_header(HTTPAuthState *state, const char *key,
             ff_parse_key_value(p, (ff_parse_key_val_cb) handle_basic_params,
                                state);
         } else if (av_stristart(value, "Digest ", &p) &&
-                   state->auth_type <= HTTP_AUTH_DIGEST) {
+                   state->auth_type <= HTTP_AUTH_DIGEST &&
+                   // Only MD5 is supported now.
+                   (state->digest_params.algorithm[0] == 0 ||
+                    strcmp(state->digest_params.algorithm, "MD5") != 0)) {
             state->auth_type = HTTP_AUTH_DIGEST;
             memset(&state->digest_params, 0, sizeof(DigestParams));
             state->realm[0] = 0;

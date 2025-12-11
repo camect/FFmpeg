@@ -39,6 +39,7 @@ typedef struct ScaleVAAPIContext {
 
     char *w_expr;      // width expression string
     char *h_expr;      // height expression string
+    int keep_ar;
 
     int force_original_aspect_ratio;
     int force_divisible_by;
@@ -107,6 +108,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     ScaleVAAPIContext *ctx   = avctx->priv;
     AVFrame *output_frame    = NULL;
     VAProcPipelineParameterBuffer params;
+    VARectangle output_region;
     int err;
 
     av_log(avctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
@@ -142,6 +144,32 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
                                    input_frame, output_frame);
     if (err < 0)
         goto fail;
+
+    input_frame->crop_left = 0;
+    input_frame->crop_right = 0;
+    input_frame->crop_top = 0;
+    input_frame->crop_bottom = 0;
+    if (ctx->keep_ar && fabsf((float)params.surface_region->width / params.surface_region->height -
+                              (float)vpp_ctx->output_width / vpp_ctx->output_height) > 0.01) {
+        int orx = 0, ory = 0, orw = vpp_ctx->output_width, orh = vpp_ctx->output_height;
+        if (params.surface_region->width * vpp_ctx->output_height >
+            vpp_ctx->output_width * params.surface_region->height) {
+            // Add vertical margins.
+            orh = vpp_ctx->output_width * params.surface_region->height / params.surface_region->width;
+            ory = (vpp_ctx->output_height - orh) / 2;
+        } else {
+            // Add horizontal margins.
+            orw = vpp_ctx->output_height * params.surface_region->width / params.surface_region->height;
+            orx = (vpp_ctx->output_width - orw) / 2;
+        }
+        output_region.x = orx;
+        output_region.y = ory;
+        output_region.width = orw;
+        output_region.height = orh;
+        params.output_region = &output_region;
+    } else {
+        params.output_region = NULL;
+    }
 
     params.filter_flags |= ctx->mode;
 
@@ -211,6 +239,8 @@ static const AVOption scale_vaapi_options[] = {
       OFFSET(w_expr), AV_OPT_TYPE_STRING, {.str = "iw"}, .flags = FLAGS },
     { "h", "Output video height",
       OFFSET(h_expr), AV_OPT_TYPE_STRING, {.str = "ih"}, .flags = FLAGS },
+    { "keep_ar", "Keep aspect ratio by padding",
+      OFFSET(keep_ar), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
     { "format", "Output video format (software format of hardware frames)",
       OFFSET(output_format_string), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "mode", "Scaling mode",

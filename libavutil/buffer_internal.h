@@ -78,6 +78,8 @@ typedef struct BufferPoolEntry {
 struct AVBufferPool {
     AVMutex mutex;
     BufferPoolEntry *pool;
+    int free_list_size;
+    int num_entries;
 
     /*
      * This is used to track when the pool is to be freed.
