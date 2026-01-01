@@ -403,7 +403,7 @@ int ffurl_read2(void *urlcontext, uint8_t *buf, int size)
 
 int ffurl_read_complete(URLContext *h, unsigned char *buf, int size)
 {
-    if (!(h->flags & AVIO_FLAG_READ))
+    if (!h || !(h->flags & AVIO_FLAG_READ))
         return AVERROR(EIO);
     return retry_transfer_wrapper(h, buf, NULL, size, size, 1);
 }

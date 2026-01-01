@@ -253,6 +253,6 @@ const FFOutputFormat ff_rtsp_muxer = {
     .write_header      = rtsp_write_header,
     .write_packet      = rtsp_write_packet,
     .write_trailer     = rtsp_write_close,
-    .p.flags           = AVFMT_NOFILE | AVFMT_GLOBALHEADER,
+    .p.flags           = AVFMT_NOFILE | AVFMT_GLOBALHEADER | AVFMT_TS_NONSTRICT,
     .p.priv_class      = &rtsp_muxer_class,
 };

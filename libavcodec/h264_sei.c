@@ -258,7 +258,7 @@ int ff_h264_sei_decode(H264SEIContext *h, GetBitContext *gb,
         } while (bytestream2_get_byteu(&gbyte) == 255);
 
         if (size > bytestream2_get_bytes_left(&gbyte)) {
-            av_log(logctx, AV_LOG_ERROR, "SEI type %d size %d truncated at %d\n",
+            av_log(logctx, AV_LOG_WARNING, "SEI type %d size %d truncated at %d\n",
                    type, size, bytestream2_get_bytes_left(&gbyte));
             return AVERROR_INVALIDDATA;
         }

@@ -36,6 +36,7 @@ typedef struct ScaleVAAPIContext {
 
     char *w_expr;      // width expression string
     char *h_expr;      // height expression string
+    int keep_ar;
 
     int force_original_aspect_ratio;
     int force_divisible_by;
@@ -45,6 +46,8 @@ typedef struct ScaleVAAPIContext {
     char *colour_matrix_string;
     int   colour_range;
     char *chroma_location_string;
+
+    int enable_passthrough;
 
     enum AVColorPrimaries colour_primaries;
     enum AVColorTransferCharacteristic colour_transfer;
@@ -84,15 +87,19 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     ff_scale_adjust_dimensions(inlink, &vpp_ctx->output_width, &vpp_ctx->output_height,
                                ctx->force_original_aspect_ratio, ctx->force_divisible_by);
 
-    if (inlink->w == vpp_ctx->output_width && inlink->h == vpp_ctx->output_height &&
+    if (ctx->enable_passthrough && 
+        inlink->w == vpp_ctx->output_width && inlink->h == vpp_ctx->output_height &&
         (vpp_ctx->input_frames->sw_format == vpp_ctx->output_format ||
          vpp_ctx->output_format == AV_PIX_FMT_NONE) &&
         ctx->colour_primaries == AVCOL_PRI_UNSPECIFIED &&
         ctx->colour_transfer == AVCOL_TRC_UNSPECIFIED &&
         ctx->colour_matrix == AVCOL_SPC_UNSPECIFIED &&
         ctx->colour_range == AVCOL_RANGE_UNSPECIFIED &&
-        ctx->chroma_location == AVCHROMA_LOC_UNSPECIFIED)
+        ctx->chroma_location == AVCHROMA_LOC_UNSPECIFIED) {
         vpp_ctx->passthrough = 1;
+    } else {
+        vpp_ctx->passthrough = 0;
+    }
 
     err = ff_vaapi_vpp_config_output(outlink);
     if (err < 0)
@@ -114,6 +121,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     ScaleVAAPIContext *ctx   = avctx->priv;
     AVFrame *output_frame    = NULL;
     VAProcPipelineParameterBuffer params;
+    VARectangle output_region;
     int err;
 
     av_log(avctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
@@ -152,6 +160,32 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
                                    input_frame, output_frame);
     if (err < 0)
         goto fail;
+
+    input_frame->crop_left = 0;
+    input_frame->crop_right = 0;
+    input_frame->crop_top = 0;
+    input_frame->crop_bottom = 0;
+    if (ctx->keep_ar && fabsf((float)params.surface_region->width / params.surface_region->height -
+                              (float)vpp_ctx->output_width / vpp_ctx->output_height) > 0.01) {
+        int orx = 0, ory = 0, orw = vpp_ctx->output_width, orh = vpp_ctx->output_height;
+        if (params.surface_region->width * vpp_ctx->output_height >
+            vpp_ctx->output_width * params.surface_region->height) {
+            // Add vertical margins.
+            orh = vpp_ctx->output_width * params.surface_region->height / params.surface_region->width;
+            ory = (vpp_ctx->output_height - orh) / 2;
+        } else {
+            // Add horizontal margins.
+            orw = vpp_ctx->output_height * params.surface_region->width / params.surface_region->height;
+            orx = (vpp_ctx->output_width - orw) / 2;
+        }
+        output_region.x = orx;
+        output_region.y = ory;
+        output_region.width = orw;
+        output_region.height = orh;
+        params.output_region = &output_region;
+    } else {
+        params.output_region = NULL;
+    }
 
     params.filter_flags |= ctx->mode;
 
@@ -221,6 +255,8 @@ static const AVOption scale_vaapi_options[] = {
       OFFSET(w_expr), AV_OPT_TYPE_STRING, {.str = "iw"}, .flags = FLAGS },
     { "h", "Output video height",
       OFFSET(h_expr), AV_OPT_TYPE_STRING, {.str = "ih"}, .flags = FLAGS },
+    { "keep_ar", "Keep aspect ratio by padding",
+      OFFSET(keep_ar), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
     { "format", "Output video format (software format of hardware frames)",
       OFFSET(output_format_string), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "mode", "Scaling mode",
@@ -268,7 +304,7 @@ static const AVOption scale_vaapi_options[] = {
     { "decrease", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 1 }, 0, 0, FLAGS, "force_oar" },
     { "increase", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 2 }, 0, 0, FLAGS, "force_oar" },
     { "force_divisible_by", "enforce that the output resolution is divisible by a defined integer when force_original_aspect_ratio is used", OFFSET(force_divisible_by), AV_OPT_TYPE_INT, { .i64 = 1}, 1, 256, FLAGS },
-
+    { "enable_passthrough", "Passthrough the frame args check", OFFSET(enable_passthrough), AV_OPT_TYPE_BOOL, { .i64 = 1}, 0, 1, FLAGS },
     { NULL },
 };
 

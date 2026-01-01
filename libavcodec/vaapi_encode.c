@@ -738,6 +738,7 @@ static int vaapi_encode_get_coded_buffer_data(AVCodecContext *avctx,
                                               VABufferID buf_id, uint8_t **dst)
 {
     VAAPIEncodeContext *ctx = avctx->priv_data;
+    size_t len, off;
     VACodedBufferSegment *buf_list, *buf;
     VAStatus vas;
     int err;
@@ -1544,12 +1545,14 @@ static const VAEntrypoint vaapi_encode_entrypoints_normal[] = {
 #endif
     0
 };
-#if VA_CHECK_VERSION(0, 39, 2)
 static const VAEntrypoint vaapi_encode_entrypoints_low_power[] = {
+#if VA_CHECK_VERSION(0, 39, 2)
     VAEntrypointEncSliceLP,
+#endif
+    VAEntrypointEncSlice,
+    VAEntrypointEncPicture,
     0
 };
-#endif
 
 static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
 {
@@ -1567,13 +1570,7 @@ static av_cold int vaapi_encode_profile_entrypoint(AVCodecContext *avctx)
 
 
     if (ctx->low_power) {
-#if VA_CHECK_VERSION(0, 39, 2)
         usable_entrypoints = vaapi_encode_entrypoints_low_power;
-#else
-        av_log(avctx, AV_LOG_ERROR, "Low-power encoding is not "
-               "supported with this VAAPI version.\n");
-        return AVERROR(EINVAL);
-#endif
     } else {
         usable_entrypoints = vaapi_encode_entrypoints_normal;
     }

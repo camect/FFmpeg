@@ -86,21 +86,23 @@ static int avc_parse_nal_units(AVIOContext *pb, NALUList *list,
             break;
 
         nal_end = ff_avc_find_startcode(nal_start, end);
-        if (pb) {
-            avio_wb32(pb, nal_end - nal_start);
-            avio_write(pb, nal_start, nal_end - nal_start);
-        } else if (list->nb_nalus >= nalu_limit) {
-            return AVERROR(ERANGE);
-        } else {
-            NALU *tmp = av_fast_realloc(list->nalus, &list->nalus_array_size,
-                                        (list->nb_nalus + 1) * sizeof(*list->nalus));
-            if (!tmp)
-                return AVERROR(ENOMEM);
-            list->nalus = tmp;
-            tmp[list->nb_nalus++] = (NALU){ .offset = nal_start - p,
-                                            .size   = nal_end - nal_start };
+        if (nal_end > nal_start) {
+            if (pb) {
+                avio_wb32(pb, nal_end - nal_start);
+                avio_write(pb, nal_start, nal_end - nal_start);
+            } else if (list->nb_nalus >= nalu_limit) {
+                return AVERROR(ERANGE);
+            } else {
+                NALU *tmp = av_fast_realloc(list->nalus, &list->nalus_array_size,
+                                            (list->nb_nalus + 1) * sizeof(*list->nalus));
+                if (!tmp)
+                    return AVERROR(ENOMEM);
+                list->nalus = tmp;
+                tmp[list->nb_nalus++] = (NALU){ .offset = nal_start - p,
+                                                .size   = nal_end - nal_start };
+            }
+            size += 4 + nal_end - nal_start;
         }
-        size += 4 + nal_end - nal_start;
         nal_start = nal_end;
     }
     return size;
