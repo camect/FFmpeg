@@ -867,7 +867,7 @@ static int hvcc_write(AVIOContext *pb, HEVCDecoderConfigurationRecord *hvcc)
     vps_count = hvcc->arrays[VPS_INDEX].numNalus;
     sps_count = hvcc->arrays[SPS_INDEX].numNalus;
     pps_count = hvcc->arrays[PPS_INDEX].numNalus;
-    if (!vps_count || vps_count > HEVC_MAX_VPS_COUNT ||
+    if (vps_count > HEVC_MAX_VPS_COUNT ||
         !sps_count || sps_count > HEVC_MAX_SPS_COUNT ||
         !pps_count || pps_count > HEVC_MAX_PPS_COUNT)
         return AVERROR_INVALIDDATA;
@@ -1059,8 +1059,10 @@ int ff_isom_write_hvcc(AVIOContext *pb, const uint8_t *data,
     }
 
     ret = ff_avc_parse_nal_units_buf(data, &start, &size);
-    if (ret < 0)
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "ff_avc_parse_nal_units_buf failed with %d\n", ret);
         return ret;
+    }
 
     hvcc_init(&hvcc);
 
@@ -1081,8 +1083,10 @@ int ff_isom_write_hvcc(AVIOContext *pb, const uint8_t *data,
             if (type == array_idx_to_type[i]) {
                 ret = hvcc_add_nal_unit(buf, len, ps_array_completeness,
                                         &hvcc, i);
-                if (ret < 0)
+                if (ret < 0) {
+                    av_log(NULL, AV_LOG_ERROR, "hvcc_add_nal_unit failed with %d\n", ret);
                     goto end;
+                }
                 break;
             }
         }

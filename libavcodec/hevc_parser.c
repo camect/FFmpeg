@@ -85,7 +85,9 @@ static int hevc_parse_slice_header(AVCodecParserContext *s, H2645NAL *nal,
     }
     if (ps->sps != ps->sps_list[ps->pps->sps_id]) {
         ps->sps  = ps->sps_list[ps->pps->sps_id];
-        ps->vps  = ps->vps_list[ps->sps->vps_id];
+        if (ps->vps_list && ps->vps_list[ps->sps->vps_id]) {
+            ps->vps  = ps->vps_list[ps->sps->vps_id];
+        }
     }
     ow  = &ps->sps->output_window;
 
@@ -97,7 +99,7 @@ static int hevc_parse_slice_header(AVCodecParserContext *s, H2645NAL *nal,
     avctx->profile  = ps->sps->ptl.general_ptl.profile_idc;
     avctx->level    = ps->sps->ptl.general_ptl.level_idc;
 
-    if (ps->vps->vps_timing_info_present_flag) {
+    if (ps->vps && ps->vps->vps_timing_info_present_flag) {
         num = ps->vps->vps_num_units_in_tick;
         den = ps->vps->vps_time_scale;
     } else if (ps->sps->vui.vui_timing_info_present_flag) {

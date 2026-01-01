@@ -864,9 +864,7 @@ int ff_hevc_parse_sps(HEVCSPS *sps, GetBitContext *gb, unsigned int *sps_id,
     sps->vps_id = get_bits(gb, 4);
 
     if (vps_list && !vps_list[sps->vps_id]) {
-        av_log(avctx, AV_LOG_ERROR, "VPS %d does not exist\n",
-               sps->vps_id);
-        return AVERROR_INVALIDDATA;
+        av_log(avctx, AV_LOG_WARNING, "VPS %d does not exist\n", sps->vps_id);
     }
 
     sps->max_sub_layers = get_bits(gb, 3) + 1;

@@ -2056,7 +2056,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     c->dstRange |= handle_jpeg(&c->dstFormat);
 
     if (src_format != c->srcFormat || dst_format != c->dstFormat)
-        av_log(c, AV_LOG_WARNING, "deprecated pixel format used, make sure you did set range correctly\n");
+        av_log(c, AV_LOG_INFO, "deprecated pixel format used, make sure you did set range correctly\n");
 
     if (c->nb_threads != 1) {
         ret = context_init_threaded(c, srcFilter, dstFilter);
